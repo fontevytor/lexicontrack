@@ -209,53 +209,64 @@ export default function App() {
 
   const getVoice = useCallback(() => {
     const findVoice = (lang: string, gender: 'Male' | 'Female') => {
-      // 1. Strict filter by exact language (British English)
-      let candidates = allVoices.filter(v => v.lang === lang || v.lang === lang.replace('-', '_'));
+      // 1. First pass: Voices that explicitly say "UK", "British", or "Great Britain" in the name
+      const explicitUK = allVoices.filter(v => {
+        const name = v.name.toLowerCase();
+        return name.includes('uk') || name.includes('british') || name.includes('great britain') || name.includes('gb');
+      });
+
+      // 2. Second pass: Filter by language (en-GB)
+      const langMatch = allVoices.filter(v => v.lang.toLowerCase().includes('gb'));
       
-      // 2. If no exact match (like en-GB), try startsWith
-      if (candidates.length === 0) {
-        candidates = allVoices.filter(v => v.lang.startsWith(lang.split('-')[0]));
+      let pool = explicitUK.length > 0 ? explicitUK : langMatch;
+      
+      // 3. Fallback to any English if no UK specific found
+      if (pool.length === 0) {
+        pool = allVoices.filter(v => v.lang.startsWith('en'));
       }
 
-      const maleNames = ['daniel', 'oliver', 'harry', 'arthur', 'george', 'david', 'james', 'guy', 'liam', 'peter', 'andrew'];
-      const femaleNames = ['serena', 'emma', 'martha', 'stephanie', 'alice', 'samantha', 'zira', 'amy', 'libby', 'victoria', 'susan'];
+      // British Male Names (Common in iOS, Android, Windows)
+      const maleNames = ['daniel', 'oliver', 'harry', 'arthur', 'george', 'david', 'james', 'guy', 'liam', 'charles', 'thomas', 'william', 'jack', 'alfie', 'malcolm', 'nigel', 'gordon', 'graham'];
+      // British Female Names
+      const femaleNames = ['serena', 'emma', 'martha', 'stephanie', 'alice', 'samantha', 'zira', 'amy', 'libby', 'victoria', 'hazel', 'fiona', 'bridget'];
 
       const isMale = (v: SpeechSynthesisVoice) => {
         const name = v.name.toLowerCase();
         if (name.includes('male') && !name.includes('female')) return true;
+        // Priority for known British male names
         return maleNames.some(target => name.includes(target));
       };
 
       const isFemale = (v: SpeechSynthesisVoice) => {
         const name = v.name.toLowerCase();
         if (name.includes('female')) return true;
+        // Priority for known British female names
         return femaleNames.some(target => name.includes(target));
       };
 
-      const genderFiltered = candidates.filter(v => 
+      const genderFiltered = pool.filter(v => 
         gender === 'Male' ? isMale(v) : isFemale(v)
       );
 
-      // Tier 1: Premium/High Quality voices (Neural, Natural, Google)
+      // Tier 1: Premium/High Quality (Google, Neural, Natural, Online)
       const premium = genderFiltered.filter(v => 
         v.name.includes('Google') || v.name.includes('Neural') || v.name.includes('Natural') || v.name.includes('Online')
       );
-
       if (premium.length > 0) return premium[0];
       
-      // Tier 2: Best common names for British English
+      // Tier 2: Best common names for British English (Prioritize Arthur/George for Male, Martha for Female)
       const bestName = genderFiltered.find(v => {
         const name = v.name.toLowerCase();
-        if (gender === 'Male') return name.includes('daniel') || name.includes('harry');
-        return name.includes('serena') || name.includes('emma');
+        if (gender === 'Male') return name.includes('arthur') || name.includes('george') || name.includes('daniel') || name.includes('harry') || name.includes('david');
+        return name.includes('martha') || name.includes('alice') || name.includes('hazel') || name.includes('serena') || name.includes('emma');
       });
       if (bestName) return bestName;
 
-      // Tier 3: Any gender filtered match
+      // Tier 3: Any gender filtered match from our pool
       if (genderFiltered.length > 0) return genderFiltered[0];
       
-      // Tier 4: Fallback to any voice with that language
-      return candidates[0] || null;
+      // Tier 4: Fallback to any in pool
+      return pool[0] || null;
     };
 
     if (voiceType === 'UK-M') return findVoice('en-GB', 'Male');
