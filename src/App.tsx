@@ -11,7 +11,9 @@ import {
   Headphones, 
   BookOpen, 
   Settings2,
-  Volume2
+  Volume2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { LESSONS } from './data';
 import { AudioData, LessonData, Chunk } from './types';
@@ -52,14 +54,15 @@ const formatTime = (s: number) => {
 const Logo = ({ size = 32 }: { size?: number }) => (
   <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
     <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-      {/* Outer Triangle (White) */}
+      {/* Outer Triangle */}
       <motion.path 
         d="M 50 10 L 90 85 L 10 85 Z" 
-        fill="white" 
+        fill="currentColor" 
+        className="text-white body-light:text-slate-900 transition-colors duration-500"
         initial={{ pathLength: 0, opacity: 0 }}
         animate={{ pathLength: 1, opacity: 1 }}
       />
-      {/* Inner Triangle (Purple) */}
+      {/* Inner Triangle */}
       <motion.path 
         d="M 50 35 L 75 80 L 25 80 Z" 
         fill="#818cf8"
@@ -79,12 +82,16 @@ export default function App() {
   
   const [currentView, setCurrentView] = useState<'menu' | 'app'>('menu');
   const [deviceMode, setDeviceMode] = useState<'mobile' | 'desktop'>('desktop');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('lexicon_theme');
+    return (saved as 'dark' | 'light') || 'dark';
+  });
   const [showMobileModules, setShowMobileModules] = useState(false);
   
   const [selectedAudio, setSelectedAudio] = useState<AudioData>(lessons[0].audios[0]);
   const [activeLessonId, setActiveLessonId] = useState<string>(lessons[0].id);
   const [playerMode, setPlayerMode] = useState<'focus' | 'audio'>('focus');
-  const [voiceType, setVoiceType] = useState<'UK-M' | 'UK-F' | 'US-F'>('UK-F');
+  const [voiceType, setVoiceType] = useState<'UK-M' | 'UK-F'>('UK-F');
   const [allVoices, setAllVoices] = useState<SpeechSynthesisVoice[]>([]);
   
   // Admin State
@@ -112,6 +119,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ethereal_lessons', JSON.stringify(lessons));
   }, [lessons]);
+
+  useEffect(() => {
+    localStorage.setItem('lexicon_theme', theme);
+    if (theme === 'light') {
+      document.body.classList.add('light');
+    } else {
+      document.body.classList.remove('light');
+    }
+  }, [theme]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -163,7 +179,6 @@ export default function App() {
 
     if (voiceType === 'UK-M') return findVoice('en-GB', 'Male', 'Harry');
     if (voiceType === 'UK-F') return findVoice('en-GB', 'Female', 'Emma');
-    if (voiceType === 'US-F') return findVoice('en-US', 'Female', 'Jerry');
 
     return allVoices.find(v => v.lang.startsWith('en')) || null;
   }, [allVoices, voiceType]);
@@ -269,46 +284,65 @@ export default function App() {
 
   if (currentView === 'menu') {
     return (
-      <div className="h-screen w-screen bg-[#050507] flex flex-col items-center justify-center p-6 bg-radial-gradient">
+      <div className="h-screen w-screen bg-[#050507] body-light:bg-slate-50 flex flex-col items-center justify-center p-6 transition-colors duration-500 relative overflow-hidden">
+        {/* Abstract background elements for theme variation */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-brand-primary/10 body-light:bg-brand-primary/5 blur-[120px] rounded-full" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-brand-secondary/20 body-light:bg-slate-200/50 blur-[120px] rounded-full" />
+        </div>
+
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-16"
+          className="text-center mb-16 relative z-10"
         >
           <div className="mb-10 flex justify-center scale-150">
             <Logo size={64} />
           </div>
-          <h1 className="text-6xl font-serif text-white tracking-tighter mb-4 italic">LexiconTrack</h1>
-          <p className="text-slate-500 uppercase tracking-[0.3em] font-medium text-xs">Immersive Language Mastery</p>
+          <h1 className="text-6xl md:text-7xl font-serif text-white body-light:text-slate-900 tracking-tighter mb-4 italic transition-all duration-500 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] body-light:drop-shadow-none">
+            LexiconTrack
+          </h1>
+          <p className="text-white/70 body-light:text-slate-500 uppercase tracking-[0.4em] font-bold text-[10px] md:text-xs transition-colors duration-500">
+            LexiconKey audio database
+          </p>
         </motion.div>
 
         <div className="flex flex-col gap-4 w-full max-w-sm">
           <button 
             onClick={() => setCurrentView('app')}
-            className="w-full h-16 rounded-2xl bg-white text-black font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+            className="w-full h-16 rounded-2xl bg-white body-light:bg-brand-primary text-black body-light:text-white font-bold text-lg hover:scale-[1.02] active:scale-[0.98] shadow-2xl transition-all flex items-center justify-center gap-3"
           >
             STUDENT ACCESS
           </button>
           <button 
             onClick={() => setShowLogin(true)}
-            className="w-full h-16 rounded-2xl border border-white/10 text-white font-bold text-lg hover:bg-white/5 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+            className="w-full h-16 rounded-2xl border border-white/10 body-light:border-slate-200 text-white body-light:text-slate-900 font-bold text-lg hover:bg-white/5 body-light:hover:bg-slate-100 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
           >
             ADMIN PANEL
           </button>
         </div>
 
-        <div className="mt-20 flex items-center gap-6 p-4 rounded-3xl bg-white/5 border border-white/5">
+        <div className="mt-20 flex items-center gap-6 p-4 rounded-3xl bg-white/5 body-light:bg-slate-100 border border-white/5 body-light:border-slate-200">
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setDeviceMode('desktop')}
+              className={`px-6 py-3 rounded-2xl transition-all flex items-center gap-2 text-xs font-bold ${deviceMode === 'desktop' ? 'bg-white/10 body-light:bg-white text-white body-light:text-brand-primary shadow-sm' : 'text-slate-500 hover:text-slate-300 body-light:hover:text-slate-600'}`}
+            >
+              COMPUTER
+            </button>
+            <button 
+              onClick={() => setDeviceMode('mobile')}
+              className={`px-6 py-3 rounded-2xl transition-all flex items-center gap-2 text-xs font-bold ${deviceMode === 'mobile' ? 'bg-white/10 body-light:bg-white text-white body-light:text-brand-primary shadow-sm' : 'text-slate-500 hover:text-slate-300 body-light:hover:text-slate-600'}`}
+            >
+              MOBILE
+            </button>
+          </div>
+          <div className="w-px h-8 bg-white/10 body-light:bg-slate-200 mx-2" />
           <button 
-            onClick={() => setDeviceMode('desktop')}
-            className={`px-6 py-3 rounded-2xl transition-all flex items-center gap-2 text-xs font-bold ${deviceMode === 'desktop' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="w-12 h-12 rounded-2xl bg-white/10 body-light:bg-white border border-white/10 body-light:border-slate-200 text-white body-light:text-slate-900 flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-sm"
           >
-            COMPUTER
-          </button>
-          <button 
-            onClick={() => setDeviceMode('mobile')}
-            className={`px-6 py-3 rounded-2xl transition-all flex items-center gap-2 text-xs font-bold ${deviceMode === 'mobile' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-          >
-            MOBILE
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
         </div>
 
@@ -323,16 +357,16 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-6"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 body-light:bg-white/90 backdrop-blur-md p-6"
             >
               <motion.form 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
                 onSubmit={handleLogin}
-                className="w-full max-w-sm glass border border-white/10 p-10 rounded-[32px] shadow-2xl"
+                className="w-full max-w-sm glass border border-white/10 body-light:border-slate-200 p-10 rounded-[32px] shadow-2xl"
               >
-                <h3 className="text-2xl font-serif mb-8 text-center text-white">Admin Security</h3>
+                <h3 className="text-2xl font-serif mb-8 text-center text-white body-light:text-slate-900">Admin Security</h3>
                 <input 
                   type="password" 
                   autoFocus
@@ -342,7 +376,7 @@ export default function App() {
                     if (loginError) setLoginError("");
                   }}
                   placeholder="Enter Passcode..."
-                  className={`w-full bg-white/5 border ${loginError ? 'border-red-500/50' : 'border-white/10'} rounded-2xl p-4 text-center text-lg outline-none focus:border-brand-primary transition-colors mb-2 text-white`}
+                  className={`w-full bg-white/5 body-light:bg-white border ${loginError ? 'border-red-500/50' : 'border-white/10 body-light:border-slate-200'} rounded-2xl p-4 text-center text-lg outline-none focus:border-brand-primary transition-colors mb-2 text-white body-light:text-slate-900`}
                 />
                 <div className="h-6 mb-4">
                   <AnimatePresence>
@@ -385,23 +419,23 @@ export default function App() {
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
                exit={{ opacity: 0 }}
-               className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+               className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 body-light:bg-white/80 backdrop-blur-sm p-6"
             >
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
-                className="w-full max-w-sm glass border border-white/10 p-8 rounded-[32px] shadow-2xl"
+                className="w-full max-w-sm glass border border-white/10 body-light:border-slate-200 p-8 rounded-[32px] shadow-2xl"
               >
                 <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center mb-6 text-red-500">
                   <X size={24} />
                 </div>
-                <h3 className="text-xl font-serif text-white mb-3">{confirmDialog.title}</h3>
-                <p className="text-slate-400 text-sm mb-8 leading-relaxed">{confirmDialog.message}</p>
+                <h3 className="text-xl font-serif text-white body-light:text-slate-900 mb-3">{confirmDialog.title}</h3>
+                <p className="text-slate-400 body-light:text-slate-600 text-sm mb-8 leading-relaxed">{confirmDialog.message}</p>
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
-                    className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-white transition-colors"
+                    className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-white body-light:hover:text-slate-900 transition-colors"
                   >
                     Cancel
                   </button>
@@ -421,7 +455,9 @@ export default function App() {
   }
 
   return (
-    <div className={`flex h-screen w-screen bg-[#050507] ${deviceMode === 'mobile' ? 'flex-col' : 'flex-row'} overflow-hidden relative`}>
+    <div className={`flex h-screen w-screen bg-[#050507] body-light:bg-slate-50 transition-colors duration-500 ${deviceMode === 'mobile' ? 'flex-col' : 'flex-row'} overflow-hidden relative`}>
+      {/* Theme Toggle Floating (Optional, maybe keep in sidebar) */}
+      
       {/* Mobile Lessons Sidebar/Drawer */}
       <AnimatePresence>
         {deviceMode === 'mobile' && showMobileModules && (
@@ -438,7 +474,7 @@ export default function App() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed left-0 top-0 bottom-0 w-[85%] max-w-[320px] bg-[#0A0A0E] border-r border-white/10 z-[70] p-8 flex flex-col"
+              className="fixed left-0 top-0 bottom-0 w-[85%] max-w-[320px] bg-[#0A0A0E] body-light:bg-white border-r border-white/10 body-light:border-slate-200 z-[70] p-8 flex flex-col"
             >
               <div className="flex justify-between items-center mb-10">
                 <span className="text-xs font-bold tracking-[0.3em] text-slate-500 uppercase">Modules</span>
@@ -451,10 +487,10 @@ export default function App() {
                 {lessons.map((lesson) => (
                   <div key={lesson.id} className="mb-4">
                     <div 
-                      className={`p-4 rounded-2xl border transition-all ${activeLessonId === lesson.id ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-white/[0.03] border-white/5'}`}
+                      className={`p-4 rounded-2xl border transition-all ${activeLessonId === lesson.id ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-white/[0.03] body-light:bg-slate-50 border-white/5 body-light:border-slate-200'}`}
                       onClick={() => setActiveLessonId(lesson.id)}
                     >
-                      <div className="font-bold text-sm text-white">{lesson.nomeDaAula}</div>
+                      <div className={`font-bold text-sm ${activeLessonId === lesson.id || theme === 'dark' ? 'text-white body-light:text-brand-primary' : 'text-slate-900'}`}>{lesson.nomeDaAula}</div>
                     </div>
                     <AnimatePresence>
                       {activeLessonId === lesson.id && (
@@ -470,7 +506,7 @@ export default function App() {
                                 setSelectedAudio(audio);
                                 setShowMobileModules(false);
                               }}
-                              className={`w-full text-left text-xs p-3 pl-6 rounded-xl transition-colors ${selectedAudio.id === audio.id ? 'bg-white/5 text-brand-primary font-bold' : 'text-slate-500'}`}
+                              className={`w-full text-left text-xs p-3 pl-6 rounded-xl transition-colors ${selectedAudio.id === audio.id ? 'bg-white/5 body-light:bg-slate-100 text-brand-primary font-bold' : 'text-slate-500'}`}
                             >
                               {audio.titulo}
                             </button>
@@ -482,10 +518,10 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="mt-8 pt-6 border-t border-white/5">
+              <div className="mt-8 pt-6 border-t border-white/5 body-light:border-slate-100">
                  <button 
                   onClick={() => { setCurrentView('menu'); setShowMobileModules(false); }}
-                  className="w-full py-4 text-xs font-bold tracking-widest text-slate-500 hover:text-white uppercase"
+                  className="w-full py-4 text-xs font-bold tracking-widest text-slate-500 hover:text-white body-light:hover:text-slate-900 uppercase"
                  >
                    Back to Home
                  </button>
@@ -496,20 +532,20 @@ export default function App() {
       </AnimatePresence>
 
       {/* Sidebar (Top bar for mobile) */}
-      <aside className={`${deviceMode === 'mobile' ? 'w-full h-[64px] border-b' : 'w-[320px] h-full border-r'} border-white/10 bg-black/40 backdrop-blur-xl ${deviceMode === 'mobile' ? 'px-6 py-0' : 'p-10'} flex ${deviceMode === 'mobile' ? 'flex-row items-center justify-between' : 'flex-col'} shrink-0 z-40`}>
+      <aside className={`${deviceMode === 'mobile' ? 'w-full h-[64px] border-b' : 'w-[320px] h-full border-r'} border-white/10 body-light:border-slate-200 bg-black/40 body-light:bg-white/90 backdrop-blur-xl ${deviceMode === 'mobile' ? 'px-6 py-0' : 'p-10'} flex ${deviceMode === 'mobile' ? 'flex-row items-center justify-between' : 'flex-col'} shrink-0 z-40 transition-colors duration-500`}>
         <div 
           className="flex items-center gap-3 cursor-pointer" 
           onClick={() => { setCurrentView('menu'); setIsAdmin(false); setAdminView(null); }}
         >
           <Logo size={24} />
-          <span className="text-md font-bold tracking-tight text-white italic">LexiconTrack</span>
+          <span className="text-md font-bold tracking-tight text-white body-light:text-slate-900 italic transition-colors">LexiconTrack</span>
         </div>
 
         {deviceMode === 'mobile' && !adminView && (
           <div className="flex items-center gap-2">
              <button 
               onClick={() => setShowMobileModules(true)}
-              className="text-white p-3 hover:bg-white/5 rounded-full transition-colors"
+              className="text-white body-light:text-slate-900 p-3 hover:bg-white/5 body-light:hover:bg-slate-100 rounded-full transition-colors"
              >
                <BookOpen size={20} />
              </button>
@@ -529,10 +565,10 @@ export default function App() {
               {lessons.map((lesson) => (
                 <div 
                   key={lesson.id} 
-                  className={`mb-3 p-4 rounded-xl border transition-all cursor-pointer ${activeLessonId === lesson.id && !adminView ? 'bg-brand-primary/10 border-brand-primary/50' : 'bg-white/[0.03] border-white/10 hover:bg-white/5'}`}
+                  className={`mb-3 p-4 rounded-xl border transition-all cursor-pointer ${activeLessonId === lesson.id && !adminView ? 'bg-brand-primary/10 border-brand-primary/50' : 'bg-white/[0.03] body-light:bg-slate-50 border-white/10 body-light:border-slate-200 hover:bg-white/5 body-light:hover:bg-white'}`}
                   onClick={() => { setActiveLessonId(lesson.id); setAdminView(null); }}
                 >
-                  <div className="font-semibold text-sm mb-2 text-white">{lesson.nomeDaAula}</div>
+                  <div className={`font-semibold text-sm mb-2 ${activeLessonId === lesson.id && !adminView ? 'text-white body-light:text-brand-primary' : 'text-slate-400 body-light:text-slate-600 hover:text-white body-light:hover:text-slate-900'}`}>{lesson.nomeDaAula}</div>
                   <AnimatePresence>
                     {activeLessonId === lesson.id && !adminView && (
                       <motion.div 
@@ -548,7 +584,7 @@ export default function App() {
                               e.stopPropagation();
                               setSelectedAudio(audio);
                             }}
-                            className={`text-xs p-2 pl-6 relative transition-colors ${selectedAudio.id === audio.id ? 'text-brand-primary font-medium' : 'text-slate-400 hover:text-white'}`}
+                            className={`text-xs p-2 pl-6 relative transition-colors ${selectedAudio.id === audio.id ? 'text-brand-primary font-medium' : 'text-slate-400 body-light:text-slate-500 hover:text-white body-light:hover:text-slate-900'}`}
                           >
                             <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[8px] opacity-40">●</span>
                             {audio.titulo}
@@ -561,34 +597,28 @@ export default function App() {
               ))}
             </div>
 
-            <div className="mt-8 pt-6 border-t border-white/5 flex flex-col gap-4">
-              <button 
-                onClick={() => setAdminView('dashboard')}
-                className={`flex items-center gap-2 text-[10px] uppercase tracking-widest transition-colors font-bold ${isAdmin ? 'text-brand-primary' : 'text-slate-500'}`}
-              >
-                <Settings2 size={12} /> {isAdmin ? "ADMIN DASHBOARD" : "LOCK"}
-              </button>
+            <div className="mt-8 pt-6 border-t border-white/5 body-light:border-slate-100 flex flex-col gap-4">
+              <div className="flex items-center justify-between mb-2">
+                <button 
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="p-2 rounded-lg bg-white/5 body-light:bg-slate-100 border border-white/10 body-light:border-slate-200 text-white body-light:text-slate-900 hover:scale-105 transition-all"
+                  title="Toggle Theme"
+                >
+                  {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                </button>
+                <div className="w-px h-4 bg-white/10 body-light:bg-slate-200 mx-2" />
+                <button 
+                  onClick={() => setAdminView('dashboard')}
+                  className={`flex items-center gap-2 text-[10px] uppercase tracking-widest transition-colors font-bold ${isAdmin ? 'text-brand-primary' : 'text-slate-500'}`}
+                >
+                  <Settings2 size={12} /> {isAdmin ? "ADMIN DASHBOARD" : "LOCK"}
+                </button>
+              </div>
               <div className="text-[10px] text-slate-500 text-center opacity-40 uppercase tracking-widest font-bold">
                 © 2026 Nody Editora
               </div>
             </div>
           </>
-        )}
-
-        {deviceMode === 'mobile' && !adminView && (
-          <div className="flex items-center gap-4">
-             <button 
-              onClick={() => { setActiveLessonId(lessons[0].id); }} // Mock menu trigger
-              className="text-slate-400 p-2"
-             >
-               <BookOpen size={20} />
-             </button>
-             {isAdmin && (
-               <button onClick={() => setAdminView('dashboard')} className="text-brand-primary p-2">
-                 <Settings2 size={20} />
-               </button>
-             )}
-          </div>
         )}
       </aside>
 
@@ -601,10 +631,10 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className={`w-full max-w-4xl glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10`}
+              className={`w-full max-w-4xl glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10 body-light:border-slate-200`}
             >
               <div className={`flex ${deviceMode === 'mobile' ? 'flex-col gap-4' : 'justify-between items-center'} mb-10`}>
-                <h2 className={`${deviceMode === 'mobile' ? 'text-2xl' : 'text-3xl'} font-serif text-white`}>Admin Dashboard</h2>
+                <h2 className={`${deviceMode === 'mobile' ? 'text-2xl' : 'text-3xl'} font-serif text-white body-light:text-slate-900`}>Admin Dashboard</h2>
                 <button onClick={addLesson} className="px-6 py-2 bg-brand-primary text-sm font-bold rounded-full hover:scale-105 transition-transform text-white">
                   + New Module
                 </button>
@@ -612,15 +642,15 @@ export default function App() {
 
               <div className="space-y-4">
                 {lessons.map(lesson => (
-                  <div key={lesson.id} className="p-4 md:p-6 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between group">
+                  <div key={lesson.id} className="p-4 md:p-6 rounded-2xl bg-white/5 body-light:bg-slate-50 border border-white/5 body-light:border-slate-200 flex items-center justify-between group">
                     <div className="flex-1 min-w-0 pr-4">
-                      <div className="text-lg font-medium text-white truncate">{lesson.nomeDaAula}</div>
+                      <div className="text-lg font-medium text-white body-light:text-slate-800 truncate">{lesson.nomeDaAula}</div>
                       <div className="text-xs text-slate-500 mt-1">{lesson.audios.length} Audio Tracks</div>
                     </div>
                     <div className={`flex gap-3 ${deviceMode === 'desktop' ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'} transition-opacity shrink-0`}>
                       <button 
                         onClick={() => { setEditingLesson(lesson); setAdminView('edit_lesson'); }}
-                        className="px-4 py-1.5 rounded-full border border-white/10 text-xs hover:bg-white/10 transition-colors text-white"
+                        className="px-4 py-1.5 rounded-full border border-white/10 body-light:border-slate-300 text-xs hover:bg-white/10 body-light:hover:bg-slate-100 transition-colors text-white body-light:text-slate-700"
                       >
                         Edit
                       </button>
@@ -643,20 +673,20 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               className="w-full max-w-4xl"
             >
-              <button onClick={() => setAdminView('dashboard')} className="text-xs text-slate-500 hover:text-white mb-6 transition-colors">← Back to Dashboard</button>
-              <div className={`glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10 mb-8`}>
+              <button onClick={() => setAdminView('dashboard')} className="text-xs text-slate-500 hover:text-white body-light:hover:text-slate-900 mb-6 transition-colors">← Back to Dashboard</button>
+              <div className={`glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10 body-light:border-slate-200 mb-8`}>
                 <label className="text-[10px] uppercase tracking-widest text-brand-primary font-bold block mb-4">Module Title</label>
                 <input 
                   type="text" 
                   value={editingLesson.nomeDaAula}
                   onChange={(e) => updateLesson({ ...editingLesson, nomeDaAula: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xl md:text-2xl font-serif outline-none focus:border-brand-primary transition-colors text-white"
+                  className="w-full bg-white/5 body-light:bg-white border border-white/10 body-light:border-slate-200 rounded-2xl p-4 text-xl md:text-2xl font-serif outline-none focus:border-brand-primary transition-colors text-white body-light:text-slate-900"
                 />
               </div>
 
-              <div className={`glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10`}>
+              <div className={`glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10 body-light:border-slate-200`}>
                 <div className={`flex ${deviceMode === 'mobile' ? 'flex-col gap-4' : 'justify-between items-center'} mb-8`}>
-                  <h3 className="text-xl font-serif text-white">Audio Tracks</h3>
+                  <h3 className="text-xl font-serif text-white body-light:text-slate-900">Audio Tracks</h3>
                   <button 
                     onClick={() => addAudio(editingLesson.id)}
                     className="px-6 py-2 border border-brand-primary/50 text-brand-primary text-xs font-bold rounded-full hover:bg-brand-primary/10 transition-colors"
@@ -666,15 +696,15 @@ export default function App() {
                 </div>
                 <div className="space-y-3">
                   {editingLesson.audios.map(audio => (
-                    <div key={audio.id} className="p-4 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between">
+                    <div key={audio.id} className="p-4 rounded-xl bg-white/[0.03] body-light:bg-slate-50 border border-white/5 body-light:border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-4 min-w-0 pr-4">
                         <span className="text-2xl shrink-0">{audio.illustration}</span>
-                        <span className="text-sm font-medium text-white truncate">{audio.titulo}</span>
+                        <span className="text-sm font-medium text-white body-light:text-slate-800 truncate">{audio.titulo}</span>
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <button 
                           onClick={() => { setEditingAudio(audio); setAdminView('edit_audio'); }}
-                          className="p-2 text-slate-400 hover:text-white transition-colors"
+                          className="p-2 text-slate-400 hover:text-white body-light:hover:text-slate-900 transition-colors"
                         >
                           <Settings2 size={16} />
                         </button>
@@ -698,8 +728,8 @@ export default function App() {
                exit={{ opacity: 0, x: -20 }}
                className="w-full max-w-4xl"
             >
-              <button onClick={() => setAdminView('edit_lesson')} className="text-xs text-slate-500 hover:text-white mb-6 transition-colors">← Back to Lesson</button>
-              <div className={`glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10 space-y-8`}>
+              <button onClick={() => setAdminView('edit_lesson')} className="text-xs text-slate-500 hover:text-white body-light:hover:text-slate-900 mb-6 transition-colors">← Back to Lesson</button>
+              <div className={`glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10 body-light:border-slate-200 space-y-8`}>
                 <div>
                   <label className="text-[10px] uppercase tracking-widest text-brand-primary font-bold block mb-4">Track Detail</label>
                   <div className={`grid ${deviceMode === 'mobile' ? 'grid-cols-1' : 'grid-cols-4'} gap-4`}>
@@ -708,7 +738,7 @@ export default function App() {
                       placeholder="Title"
                       value={editingAudio.titulo}
                       onChange={(e) => updateAudio({ ...editingAudio, titulo: e.target.value })}
-                      className={`${deviceMode === 'mobile' ? 'w-full' : 'col-span-3'} bg-white/5 border border-white/10 rounded-xl p-4 text-lg outline-none focus:border-brand-primary transition-colors text-white`}
+                      className={`${deviceMode === 'mobile' ? 'w-full' : 'col-span-3'} bg-white/5 body-light:bg-white border border-white/10 body-light:border-slate-200 rounded-xl p-4 text-lg outline-none focus:border-brand-primary transition-colors text-white body-light:text-slate-900`}
                     />
                     <div className="flex gap-4">
                       <input 
@@ -716,7 +746,7 @@ export default function App() {
                         placeholder="Icon"
                         value={editingAudio.illustration}
                         onChange={(e) => updateAudio({ ...editingAudio, illustration: e.target.value })}
-                        className="bg-white/5 border border-white/10 rounded-xl p-4 text-2xl text-center outline-none focus:border-brand-primary transition-colors text-white w-20"
+                        className="bg-white/5 body-light:bg-white border border-white/10 body-light:border-slate-200 rounded-xl p-4 text-2xl text-center outline-none focus:border-brand-primary transition-colors text-white body-light:text-slate-900 w-20"
                       />
                       <div className="flex-1 flex items-center text-[10px] text-slate-500 italic">
                         Tip: Use emojis for track icons
@@ -733,7 +763,7 @@ export default function App() {
                   <textarea 
                     value={editingAudio.texto}
                     onChange={(e) => updateAudio({ ...editingAudio, texto: e.target.value })}
-                    className="w-full h-80 bg-white/5 border border-white/10 rounded-2xl p-6 text-base md:text-lg font-serif leading-relaxed outline-none focus:border-brand-primary transition-colors custom-scrollbar resize-none text-white"
+                    className="w-full h-80 bg-white/5 body-light:bg-white border border-white/10 body-light:border-slate-200 rounded-2xl p-6 text-base md:text-lg font-serif leading-relaxed outline-none focus:border-brand-primary transition-colors custom-scrollbar resize-none text-white body-light:text-slate-900"
                     placeholder="Enter lesson text here... [PAUSA 2] Hello world!"
                   />
                 </div>
@@ -770,11 +800,11 @@ export default function App() {
 const PlayerContent: React.FC<{ 
   audio: AudioData; 
   voice: SpeechSynthesisVoice | null;
-  voiceType: 'UK-M' | 'UK-F' | 'US-F';
+  voiceType: 'UK-M' | 'UK-F';
   deviceMode: 'mobile' | 'desktop';
   playerMode: 'focus' | 'audio';
   setPlayerMode: (mode: 'focus' | 'audio') => void;
-  onVoiceSelect: (type: 'UK-M' | 'UK-F' | 'US-F') => void;
+  onVoiceSelect: (type: 'UK-M' | 'UK-F') => void;
 }> = ({ 
   audio, 
   voice,
@@ -891,22 +921,22 @@ const PlayerContent: React.FC<{
     <div className={`flex flex-col items-center w-full max-w-[600px] mx-auto ${deviceMode === 'mobile' ? 'h-full justify-between pb-8' : 'justify-center min-h-[600px]'}`}>
       
       {/* Mode Selector Toggle */}
-      <div className="flex bg-white/5 p-1 rounded-2xl mb-8 md:mb-12 border border-white/5 relative z-10 scale-90 md:scale-100">
+      <div className="flex bg-white/5 body-light:bg-slate-100 p-1 rounded-2xl mb-8 md:mb-12 border border-white/5 body-light:border-slate-200 relative z-10 scale-90 md:scale-100">
         <button 
           onClick={() => setPlayerMode('focus')}
-          className={`px-5 py-2 rounded-xl text-[10px] font-bold tracking-widest transition-all ${playerMode === 'focus' ? 'bg-brand-primary text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          className={`px-5 py-2 rounded-xl text-[10px] font-bold tracking-widest transition-all ${playerMode === 'focus' ? 'bg-brand-primary text-white shadow-lg' : 'text-slate-500 hover:text-slate-300 body-light:hover:text-slate-600'}`}
         >
           FOCUS MODE
         </button>
         <button 
           onClick={() => setPlayerMode('audio')}
-          className={`px-5 py-2 rounded-xl text-[10px] font-bold tracking-widest transition-all ${playerMode === 'audio' ? 'bg-brand-primary text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          className={`px-5 py-2 rounded-xl text-[10px] font-bold tracking-widest transition-all ${playerMode === 'audio' ? 'bg-brand-primary text-white shadow-lg' : 'text-slate-500 hover:text-slate-300 body-light:hover:text-slate-600'}`}
         >
           JUST AUDIO
         </button>
       </div>
 
-      <h2 className={`text-white font-serif mb-6 md:mb-12 tracking-tight text-center ${deviceMode === 'mobile' ? 'text-2xl px-4' : 'text-5xl'}`}>{audio.titulo}</h2>
+      <h2 className={`text-white body-light:text-slate-900 font-serif mb-6 md:mb-12 tracking-tight text-center ${deviceMode === 'mobile' ? 'text-2xl px-4' : 'text-5xl'}`}>{audio.titulo}</h2>
 
       {/* Conditional Rendering: Transcript or Audio Visualizer */}
       <div className={`w-full flex-1 flex flex-col justify-center mb-6 md:mb-12 relative overflow-hidden transition-all duration-700 ${playerMode === 'audio' ? 'opacity-50 scale-90' : 'opacity-100'}`}>
@@ -928,7 +958,7 @@ const PlayerContent: React.FC<{
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 0.2, scale: 0.95 }}
                       exit={{ opacity: 0 }}
-                      className={`font-serif leading-relaxed text-white text-center italic ${deviceMode === 'mobile' ? 'text-md max-w-[80%]' : 'text-2xl'}`}
+                      className={`font-serif leading-relaxed text-white body-light:text-slate-900 text-center italic ${deviceMode === 'mobile' ? 'text-md max-w-[80%]' : 'text-2xl'}`}
                     >
                       {prevChunk.content}
                     </motion.p>
@@ -962,7 +992,7 @@ const PlayerContent: React.FC<{
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
-                      className={`font-serif leading-relaxed text-white text-center font-bold drop-shadow-[0_0_20px_rgba(255,255,255,0.4)] ${deviceMode === 'mobile' ? 'text-xl' : 'text-4xl'}`}
+                      className={`font-serif leading-relaxed text-white body-light:text-slate-900 text-center font-bold drop-shadow-[0_0_20px_rgba(255,255,255,0.4)] body-light:drop-shadow-none ${deviceMode === 'mobile' ? 'text-xl' : 'text-4xl'}`}
                     >
                       {currentChunk?.content}
                     </motion.p>
@@ -979,7 +1009,7 @@ const PlayerContent: React.FC<{
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 0.2, scale: 0.95 }}
                       exit={{ opacity: 0 }}
-                      className={`font-serif leading-relaxed text-white text-center italic ${deviceMode === 'mobile' ? 'text-md max-w-[80%]' : 'text-2xl'}`}
+                      className={`font-serif leading-relaxed text-white body-light:text-slate-900 text-center italic ${deviceMode === 'mobile' ? 'text-md max-w-[80%]' : 'text-2xl'}`}
                     >
                       {nextChunk.content}
                     </motion.p>
@@ -995,9 +1025,9 @@ const PlayerContent: React.FC<{
               exit={{ opacity: 0, scale: 0.8 }}
               className="flex flex-col items-center justify-center h-full"
             >
-              <div className="p-12 rounded-[40px] bg-white/[0.02] border border-white/5 relative group">
+              <div className="p-12 rounded-[40px] bg-white/[0.02] body-light:bg-slate-100 border border-white/5 body-light:border-slate-200 relative group">
                 <div className="absolute inset-0 bg-brand-primary/10 blur-[100px] opacity-20 group-hover:opacity-40 transition-opacity" />
-                <Headphones size={120} className="text-white opacity-20 relative z-10" />
+                <Headphones size={120} className="text-white body-light:text-slate-300 opacity-20 relative z-10" />
                 
                 {/* Visualizer feedback bars */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-end gap-1.5 h-12">
@@ -1018,7 +1048,7 @@ const PlayerContent: React.FC<{
       </div>
 
       <div className={`w-full ${deviceMode === 'mobile' ? 'px-6' : 'max-w-md mx-auto'} mb-8`}>
-        <div className="h-[4px] w-full bg-white/5 rounded-full relative mb-4">
+        <div className="h-[4px] w-full bg-white/5 body-light:bg-slate-200 rounded-full relative mb-4">
           <motion.div 
             className="absolute left-0 top-0 h-full bg-brand-primary shadow-[0_0_10px_rgba(129,140,248,0.5)] rounded-full"
             animate={{ width: `${progressPercent}%` }}
@@ -1034,19 +1064,19 @@ const PlayerContent: React.FC<{
       <div className="flex items-center justify-center gap-10 md:gap-12 mb-12">
         <button 
           onClick={() => skipRelative(-1)}
-          className="text-slate-400 hover:text-white transition-colors p-2"
+          className="text-slate-400 body-light:text-slate-500 hover:text-white body-light:hover:text-slate-900 transition-colors p-2"
         >
           <SkipBack size={deviceMode === 'mobile' ? 24 : 26} />
         </button>
         <button 
           onClick={togglePlay}
-          className={`rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl ${deviceMode === 'mobile' ? 'w-20 h-20' : 'w-[72px] h-[72px]'}`}
+          className={`rounded-full bg-white body-light:bg-slate-900 text-black body-light:text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl ${deviceMode === 'mobile' ? 'w-20 h-20' : 'w-[72px] h-[72px]'}`}
         >
           {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
         </button>
         <button 
           onClick={() => skipRelative(1)}
-          className="text-slate-400 hover:text-white transition-colors p-2"
+          className="text-slate-400 body-light:text-slate-500 hover:text-white body-light:hover:text-slate-900 transition-colors p-2"
         >
           <SkipForward size={24} />
         </button>
@@ -1060,12 +1090,11 @@ const PlayerContent: React.FC<{
                initial={{ opacity: 0, y: 10, scale: 0.95 }}
                animate={{ opacity: 1, y: 0, scale: 1 }}
                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-               className="absolute bottom-full right-0 mb-4 w-56 glass border border-white/10 rounded-2xl p-2 shadow-2xl overflow-hidden"
+               className="absolute bottom-full right-0 mb-4 w-56 glass border border-white/10 body-light:border-slate-200 rounded-2xl p-2 shadow-2xl overflow-hidden"
             >
               {[
                 { id: 'UK-F', label: 'a) British Female' },
-                { id: 'UK-M', label: 'b) British Male' },
-                { id: 'US-F', label: 'c) American Female' }
+                { id: 'UK-M', label: 'b) British Male' }
               ].map((v) => (
                 <button 
                   key={v.id}
@@ -1073,9 +1102,9 @@ const PlayerContent: React.FC<{
                     onVoiceSelect(v.id as any);
                     setShowVoiceMenu(false);
                   }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${voiceType === v.id ? 'bg-brand-primary text-white' : 'hover:bg-white/5 text-slate-400 font-medium'}`}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${voiceType === v.id ? 'bg-brand-primary text-white' : 'hover:bg-white/5 body-light:hover:bg-slate-50 text-slate-400 body-light:text-slate-600 font-medium'}`}
                 >
-                  <div className={`w-1.5 h-1.5 rounded-full ${voiceType === v.id ? 'bg-white shadow-[0_0_8px_white]' : 'bg-slate-700'}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${voiceType === v.id ? 'bg-white shadow-[0_0_8px_white]' : 'bg-slate-700 body-light:bg-slate-300'}`} />
                   <div className="text-left">
                     <div className="text-[11px] font-bold tracking-tight leading-none">{v.label}</div>
                   </div>
@@ -1087,12 +1116,11 @@ const PlayerContent: React.FC<{
 
         <button 
           onClick={() => setShowVoiceMenu(!showVoiceMenu)}
-          className={`flex items-center justify-center gap-3 px-6 py-3 rounded-full glass border border-white/10 text-xs text-slate-300 hover:text-white transition-all group mx-auto mb-4 w-full h-12 shadow-xl`}
+          className={`flex items-center justify-center gap-3 px-6 py-3 rounded-full glass border border-white/10 body-light:border-slate-200 text-xs text-slate-300 body-light:text-slate-900 hover:text-white body-light:hover:bg-slate-50 transition-all group mx-auto mb-4 w-full h-12 shadow-xl shrink-0`}
         >
           <div className="w-2.5 h-2.5 rounded-full bg-brand-accent shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
           <span className="font-medium whitespace-nowrap">Voice: {
-            voiceType === 'UK-F' ? 'British Female' : 
-            voiceType === 'UK-M' ? 'British Male' : 'American Female'
+            voiceType === 'UK-F' ? 'British Female' : 'British Male'
           }</span>
           <motion.div animate={{ rotate: showVoiceMenu ? 180 : 0 }}>
             <ChevronDown size={14} className="ml-auto" />

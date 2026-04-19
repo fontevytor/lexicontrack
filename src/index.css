@@ -12,22 +12,39 @@
   --color-bg-base: #050507;
 }
 
+@variant body-light (&:where(.light, .light *));
+
 @layer base {
   body {
-    @apply bg-[var(--color-bg-base)] text-zinc-100 font-sans antialiased overflow-hidden;
+    @apply bg-[var(--color-bg-base)] text-zinc-100 font-sans antialiased overflow-hidden transition-colors duration-500;
     background-image: 
       radial-gradient(circle at 80% 20%, #1e1b4b 0%, transparent 40%),
       radial-gradient(circle at 10% 80%, #312e81 0%, transparent 40%);
+  }
+
+  body.light {
+    @apply bg-slate-50 text-slate-900;
+    background-image: 
+      radial-gradient(circle at 80% 20%, #f0f9ff 0%, transparent 40%),
+      radial-gradient(circle at 10% 80%, #f5f3ff 0%, transparent 40%);
   }
 }
 
 /* Custom Glassmorphism Utility */
 .glass {
-  @apply bg-white/[0.03] backdrop-blur-xl border border-white/10;
+  @apply bg-white/[0.03] backdrop-blur-xl border border-white/10 transition-colors duration-500;
+}
+
+.light .glass {
+  @apply bg-white/70 backdrop-blur-md border-slate-200 shadow-xl shadow-slate-200/50;
 }
 
 .glass-card {
-  @apply bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden;
+  @apply bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden transition-colors duration-500;
+}
+
+.light .glass-card {
+  @apply bg-white border-slate-200 shadow-sm;
 }
 
 .highlight-shadow {
