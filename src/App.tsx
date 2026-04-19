@@ -180,53 +180,81 @@ export default function App() {
   useEffect(() => {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      setAllVoices(voices);
+      if (voices.length > 0) {
+        setAllVoices(voices);
+      }
     };
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    // Mobile fallback: poll for voices a few times if list is empty
+    const timer = setInterval(() => {
+      const v = window.speechSynthesis.getVoices();
+      if (v.length > 0) {
+        setAllVoices(v);
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+      window.speechSynthesis.onvoiceschanged = null;
+    };
   }, []);
 
   const getVoice = useCallback(() => {
-    const findVoice = (lang: string, gender: 'Male' | 'Female', preferredName?: string) => {
-      const candidates = allVoices.filter(v => v.lang.startsWith(lang));
+    const findVoice = (lang: string, gender: 'Male' | 'Female') => {
+      // 1. Strict filter by exact language (British English)
+      let candidates = allVoices.filter(v => v.lang === lang || v.lang === lang.replace('-', '_'));
       
-      // Try exact name match first if provided
-      if (preferredName) {
-        const exactMatch = candidates.find(v => v.name.toLowerCase().includes(preferredName.toLowerCase()));
-        if (exactMatch) return exactMatch;
+      // 2. If no exact match (like en-GB), try startsWith
+      if (candidates.length === 0) {
+        candidates = allVoices.filter(v => v.lang.startsWith(lang.split('-')[0]));
       }
+
+      const maleNames = ['daniel', 'oliver', 'harry', 'arthur', 'george', 'david', 'james', 'guy', 'liam', 'peter', 'andrew'];
+      const femaleNames = ['serena', 'emma', 'martha', 'stephanie', 'alice', 'samantha', 'zira', 'amy', 'libby', 'victoria', 'susan'];
 
       const isMale = (v: SpeechSynthesisVoice) => {
         const name = v.name.toLowerCase();
         if (name.includes('male') && !name.includes('female')) return true;
-        if (name.includes('david') || name.includes('daniel') || name.includes('harry') || name.includes('james') || name.includes('mark') || name.includes('guy') || name.includes('joey') || name.includes('alex') || name.includes('liam')) return true;
-        return false;
+        return maleNames.some(target => name.includes(target));
       };
 
       const isFemale = (v: SpeechSynthesisVoice) => {
         const name = v.name.toLowerCase();
         if (name.includes('female')) return true;
-        if (name.includes('samantha') || name.includes('zira') || name.includes('emma') || name.includes('google us english')) return true;
-        return false;
+        return femaleNames.some(target => name.includes(target));
       };
 
       const genderFiltered = candidates.filter(v => 
         gender === 'Male' ? isMale(v) : isFemale(v)
       );
 
-      // Tier 1: Premium/Google/Natural
+      // Tier 1: Premium/High Quality voices (Neural, Natural, Google)
       const premium = genderFiltered.filter(v => 
-        v.name.includes('Google') || v.name.includes('Neural') || v.name.includes('Natural')
+        v.name.includes('Google') || v.name.includes('Neural') || v.name.includes('Natural') || v.name.includes('Online')
       );
 
       if (premium.length > 0) return premium[0];
+      
+      // Tier 2: Best common names for British English
+      const bestName = genderFiltered.find(v => {
+        const name = v.name.toLowerCase();
+        if (gender === 'Male') return name.includes('daniel') || name.includes('harry');
+        return name.includes('serena') || name.includes('emma');
+      });
+      if (bestName) return bestName;
+
+      // Tier 3: Any gender filtered match
       if (genderFiltered.length > 0) return genderFiltered[0];
       
+      // Tier 4: Fallback to any voice with that language
       return candidates[0] || null;
     };
 
-    if (voiceType === 'UK-M') return findVoice('en-GB', 'Male', 'Harry');
-    if (voiceType === 'UK-F') return findVoice('en-GB', 'Female', 'Emma');
+    if (voiceType === 'UK-M') return findVoice('en-GB', 'Male');
+    if (voiceType === 'UK-F') return findVoice('en-GB', 'Female');
 
     return allVoices.find(v => v.lang.startsWith('en')) || null;
   }, [allVoices, voiceType]);
