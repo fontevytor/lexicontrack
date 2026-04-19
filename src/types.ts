@@ -12,5 +12,5 @@ export interface LessonData {
 }
 
 export type Chunk = 
-  | { type: 'text'; content: string; duration: number; start: number }
+  | { type: 'text'; content: string; duration: number; start: number; audioUrl?: string }
   | { type: 'pause'; duration: number; start: number };

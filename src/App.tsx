@@ -17,6 +17,7 @@ import {
   LogOut,
   CloudUpload
 } from 'lucide-react';
+import { GoogleGenAI, Modality } from "@google/genai";
 import { LESSONS } from './data';
 import { AudioData, LessonData, Chunk } from './types';
 import { db, auth, signInWithGoogle } from './lib/firebase';
@@ -111,6 +112,8 @@ export default function App() {
   const [playerMode, setPlayerMode] = useState<'focus' | 'audio'>('focus');
   const [voiceType, setVoiceType] = useState<'UK-M' | 'UK-F'>('UK-F');
   const [allVoices, setAllVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [isUsingOnlineVoice, setIsUsingOnlineVoice] = useState(true);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   
   // Admin UI State
   const [showLogin, setShowLogin] = useState(false);
@@ -964,6 +967,8 @@ export default function App() {
                 voiceType={voiceType}
                 deviceMode={deviceMode}
                 playerMode={playerMode}
+                isUsingOnlineVoice={isUsingOnlineVoice}
+                setIsUsingOnlineVoice={setIsUsingOnlineVoice}
                 setPlayerMode={setPlayerMode}
                 onVoiceSelect={(type) => setVoiceType(type)}
               />
@@ -981,6 +986,8 @@ const PlayerContent: React.FC<{
   voiceType: 'UK-M' | 'UK-F';
   deviceMode: 'mobile' | 'desktop';
   playerMode: 'focus' | 'audio';
+  isUsingOnlineVoice: boolean;
+  setIsUsingOnlineVoice: (v: boolean) => void;
   setPlayerMode: (mode: 'focus' | 'audio') => void;
   onVoiceSelect: (type: 'UK-M' | 'UK-F') => void;
 }> = ({ 
@@ -989,6 +996,8 @@ const PlayerContent: React.FC<{
   voiceType,
   deviceMode,
   playerMode,
+  isUsingOnlineVoice,
+  setIsUsingOnlineVoice,
   setPlayerMode,
   onVoiceSelect
 }) => {
@@ -996,11 +1005,43 @@ const PlayerContent: React.FC<{
   const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   
   const chunksRef = useRef<Chunk[]>([]);
+  const audioObjRef = useRef<HTMLAudioElement | null>(null);
   const totalDurationRef = useRef(0);
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const generateChunkAudio = async (index: number) => {
+    const chunk = chunksRef.current[index];
+    if (chunk.type !== 'text' || chunk.audioUrl) return;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const voiceName = voiceType === 'UK-M' ? 'Puck' : 'Kore';
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-tts-preview",
+        contents: [{ parts: [{ text: chunk.content }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName },
+            },
+          },
+        },
+      });
+
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        chunk.audioUrl = `data:audio/wav;base64,${base64Audio}`;
+      }
+    } catch (error) {
+      console.error('Error generating audio for chunk:', error);
+    }
+  };
 
   useEffect(() => {
     const { chunks, totalDuration } = parseChunks(audio.texto);
@@ -1017,14 +1058,25 @@ const PlayerContent: React.FC<{
     };
   }, [audio.id]);
 
+  useEffect(() => {
+    // Clear cached audio on voice type change
+    chunksRef.current.forEach(c => {
+      if (c.type === 'text') delete c.audioUrl;
+    });
+  }, [voiceType]);
+
   const stopAudio = useCallback(() => {
     setIsPlaying(false);
     window.speechSynthesis.cancel();
+    if (audioObjRef.current) {
+      audioObjRef.current.pause();
+      audioObjRef.current = null;
+    }
     if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
     if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
   }, []);
 
-  const playChunk = useCallback((index: number) => {
+  const playChunk = useCallback(async (index: number) => {
     if (index >= chunksRef.current.length) {
       stopAudio();
       return;
@@ -1039,30 +1091,55 @@ const PlayerContent: React.FC<{
         playChunk(index + 1);
       }, chunk.duration * 1000);
     } else {
-      const utterance = new SpeechSynthesisUtterance(chunk.content);
-      
-      // CRITICAL: Always force en-GB language tag
-      utterance.lang = 'en-GB';
+      if (isUsingOnlineVoice) {
+        if (!chunk.audioUrl) {
+          setIsGenerating(true);
+          await generateChunkAudio(index);
+          setIsGenerating(false);
+        }
 
-      if (voice) {
-        utterance.voice = voice;
-        
-        // Artificial gender distinction for limited voice sets (mobile)
-        if (voiceType === 'UK-M') {
-          utterance.pitch = 0.85; 
-          utterance.rate = 0.95;  
-        } else {
-          utterance.pitch = 1.05; 
-          utterance.rate = 1.0;
+        if (chunk.audioUrl) {
+          const audio = new Audio(chunk.audioUrl);
+          audioObjRef.current = audio;
+          audio.onended = () => {
+            playChunk(index + 1);
+          };
+          audio.play().catch(e => {
+            console.error("Audio playback failed, falling back to system voice", e);
+            fallbackToSystemVoice(chunk, index);
+          });
+
+          // Pre-generate NEXT chunk
+          if (index + 1 < chunksRef.current.length && chunksRef.current[index+1].type === 'text') {
+            generateChunkAudio(index + 1);
+          }
+          return;
         }
       }
       
-      utterance.onend = () => {
-        playChunk(index + 1);
-      };
-      window.speechSynthesis.speak(utterance);
+      fallbackToSystemVoice(chunk, index);
     }
-  }, [voice, stopAudio]);
+  }, [voice, voiceType, isUsingOnlineVoice, stopAudio]);
+
+  const fallbackToSystemVoice = (chunk: Chunk, index: number) => {
+    if (chunk.type !== 'text') return;
+    const utterance = new SpeechSynthesisUtterance(chunk.content);
+    utterance.lang = 'en-GB';
+    if (voice) {
+      utterance.voice = voice;
+      if (voiceType === 'UK-M') {
+        utterance.pitch = 0.85; 
+        utterance.rate = 0.95;  
+      } else {
+        utterance.pitch = 1.05; 
+        utterance.rate = 1.0;
+      }
+    }
+    utterance.onend = () => {
+      playChunk(index + 1);
+    };
+    window.speechSynthesis.speak(utterance);
+  };
 
   const togglePlay = () => {
     if (isPlaying) {
@@ -1264,8 +1341,16 @@ const PlayerContent: React.FC<{
         </button>
         <button 
           onClick={togglePlay}
-          className={`rounded-full bg-white body-light:bg-slate-900 text-black body-light:text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl ${deviceMode === 'mobile' ? 'w-20 h-20' : 'w-[72px] h-[72px]'}`}
+          disabled={isGenerating}
+          className={`rounded-full bg-white body-light:bg-slate-900 text-black body-light:text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl relative ${deviceMode === 'mobile' ? 'w-20 h-20' : 'w-[72px] h-[72px]'}`}
         >
+          {isGenerating && (
+            <motion.div 
+              className="absolute inset-0 rounded-full border-4 border-brand-primary border-t-transparent"
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            />
+          )}
           {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
         </button>
         <button 
@@ -1280,31 +1365,52 @@ const PlayerContent: React.FC<{
       <div className={`${deviceMode === 'mobile' ? 'relative w-[calc(100%-3rem)]' : 'absolute bottom-10 right-10'} z-50`}>
         <AnimatePresence>
           {showVoiceMenu && (
-            <motion.div 
-               initial={{ opacity: 0, y: 10, scale: 0.95 }}
-               animate={{ opacity: 1, y: 0, scale: 1 }}
-               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-               className="absolute bottom-full right-0 mb-4 w-56 glass border border-white/10 body-light:border-slate-200 rounded-2xl p-2 shadow-2xl overflow-hidden"
-            >
-              {[
-                { id: 'UK-F', label: 'a) British Female' },
-                { id: 'UK-M', label: 'b) British Male' }
-              ].map((v) => (
-                <button 
-                  key={v.id}
-                  onClick={() => {
-                    onVoiceSelect(v.id as any);
-                    setShowVoiceMenu(false);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${voiceType === v.id ? 'bg-brand-primary text-white' : 'hover:bg-white/5 body-light:hover:bg-slate-50 text-slate-400 body-light:text-slate-600 font-medium'}`}
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${voiceType === v.id ? 'bg-white shadow-[0_0_8px_white]' : 'bg-slate-700 body-light:bg-slate-300'}`} />
-                  <div className="text-left">
-                    <div className="text-[11px] font-bold tracking-tight leading-none">{v.label}</div>
-                  </div>
-                </button>
-              ))}
-            </motion.div>
+               <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute bottom-full right-0 mb-4 w-60 glass border border-white/10 body-light:border-slate-200 rounded-2xl p-2 shadow-2xl overflow-hidden"
+               >
+                 {/* Online Voice Toggle */}
+                 <div className="px-3 py-3 flex items-center justify-between border-b border-white/10 body-light:border-slate-200 mb-1">
+                   <div className="flex flex-col">
+                     <span className="text-[10px] font-bold text-white body-light:text-slate-900 uppercase tracking-widest">Online Voice</span>
+                     <span className="text-[8px] text-brand-primary font-bold">HIGH QUALITY</span>
+                   </div>
+                   <button 
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       setIsUsingOnlineVoice(!isUsingOnlineVoice);
+                     }}
+                     className={`w-10 h-5 rounded-full transition-all relative ${isUsingOnlineVoice ? 'bg-brand-primary' : 'bg-slate-700 body-light:bg-slate-300'}`}
+                   >
+                     <motion.div 
+                       className="absolute top-1 left-1 w-3 h-3 bg-white rounded-full shadow-md"
+                       animate={{ x: isUsingOnlineVoice ? 20 : 0 }}
+                     />
+                   </button>
+                 </div>
+
+                 {[
+                   { id: 'UK-F', label: 'Martha (Female)' },
+                   { id: 'UK-M', label: 'Arthur (Male)' }
+                 ].map((v) => (
+                   <button 
+                     key={v.id}
+                     onClick={() => {
+                       onVoiceSelect(v.id as any);
+                       setShowVoiceMenu(false);
+                     }}
+                     className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${voiceType === v.id ? 'bg-brand-primary text-white' : 'hover:bg-white/5 body-light:hover:bg-slate-50 text-slate-400 body-light:text-slate-600 font-medium'}`}
+                   >
+                     <div className={`w-1.5 h-1.5 rounded-full ${voiceType === v.id ? 'bg-white shadow-[0_0_8px_white]' : 'bg-slate-700 body-light:bg-slate-300'}`} />
+                     <div className="text-left">
+                       <div className="text-[11px] font-bold tracking-tight leading-none text-white body-light:text-slate-900">{v.label}</div>
+                       <div className="text-[9px] opacity-70 mt-1">British English</div>
+                     </div>
+                   </button>
+                 ))}
+               </motion.div>
           )}
         </AnimatePresence>
 
