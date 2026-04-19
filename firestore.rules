@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Lessons Rules
+    match /lessons/{lessonId} {
+      allow read: if true; // Public access for students
+      
+      allow create: if isAdmin() 
+        && isValidId(lessonId)
+        && isValidLesson(incoming());
+        
+      allow update: if isAdmin() 
+        && isValidLesson(incoming())
+        && (incoming().diff(existing()).affectedKeys().hasOnly(['nomeDaAula', 'audios', 'order', 'updatedAt']));
+        
+      allow delete: if isAdmin();
+    }
+
+    function isValidLesson(data) {
+      return data.keys().hasAll(['id', 'nomeDaAula', 'audios']) 
+        && data.id is string && data.id.size() <= 128
+        && data.nomeDaAula is string && data.nomeDaAula.size() <= 200
+        && data.audios is list && data.audios.size() <= 100;
+        // Further nested validation is limited in rules but this covers top level
+    }
+
+    // Admin collection rules
+    match /admins/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if false; // Admins must be provisioned manually or via console
+    }
+  }
+}

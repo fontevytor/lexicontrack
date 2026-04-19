@@ -13,10 +13,26 @@ import {
   Settings2,
   Volume2,
   Sun,
-  Moon
+  Moon,
+  LogOut,
+  CloudUpload
 } from 'lucide-react';
 import { LESSONS } from './data';
 import { AudioData, LessonData, Chunk } from './types';
+import { db, auth, signInWithGoogle } from './lib/firebase';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  query, 
+  orderBy,
+  getDocs,
+  writeBatch,
+  serverTimestamp
+} from 'firebase/firestore';
 
 // --- Utilities ---
 const parseChunks = (texto: string): { chunks: Chunk[], totalDuration: number } => {
@@ -75,11 +91,12 @@ const Logo = ({ size = 32 }: { size?: number }) => (
 );
 
 export default function App() {
-  const [lessons, setLessons] = useState<LessonData[]>(() => {
-    const saved = localStorage.getItem('ethereal_lessons');
-    return saved ? JSON.parse(saved) : LESSONS;
-  });
-  
+  const [lessons, setLessons] = useState<LessonData[]>(LESSONS);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [isCloudSynced, setIsCloudSynced] = useState(false);
+
   const [currentView, setCurrentView] = useState<'menu' | 'app'>('menu');
   const [deviceMode, setDeviceMode] = useState<'mobile' | 'desktop'>('desktop');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -88,20 +105,55 @@ export default function App() {
   });
   const [showMobileModules, setShowMobileModules] = useState(false);
   
-  const [selectedAudio, setSelectedAudio] = useState<AudioData>(lessons[0].audios[0]);
-  const [activeLessonId, setActiveLessonId] = useState<string>(lessons[0].id);
+  const [selectedAudio, setSelectedAudio] = useState<AudioData>(LESSONS[0].audios[0]);
+  const [activeLessonId, setActiveLessonId] = useState<string>(LESSONS[0].id);
   const [playerMode, setPlayerMode] = useState<'focus' | 'audio'>('focus');
   const [voiceType, setVoiceType] = useState<'UK-M' | 'UK-F'>('UK-F');
   const [allVoices, setAllVoices] = useState<SpeechSynthesisVoice[]>([]);
   
-  // Admin State
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Admin UI State
   const [showLogin, setShowLogin] = useState(false);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [adminView, setAdminView] = useState<'dashboard' | 'edit_lesson' | 'edit_audio' | null>(null);
   const [editingLesson, setEditingLesson] = useState<LessonData | null>(null);
   const [editingAudio, setEditingAudio] = useState<AudioData | null>(null);
+
+  // Firestore Sync
+  useEffect(() => {
+    const q = query(collection(db, 'lessons'), orderBy('order', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => doc.data() as LessonData);
+      if (docs.length > 0) {
+        setLessons(docs);
+        setIsCloudSynced(true);
+      } else {
+        setIsCloudSynced(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Auth State
+  useEffect(() => {
+    return onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (u) {
+        // Check if user is in admins collection
+        const adminDoc = await getDocs(query(collection(db, 'admins')));
+        const adminIds = adminDoc.docs.map(d => d.id);
+        
+        // Also check localStorage passcode for session continuity
+        const sessionPasscode = localStorage.getItem('lexicon_admin_session');
+        if (adminIds.includes(u.uid) || u.email === 'fontevytor@gmail.com' || sessionPasscode === 'admin12345') {
+          setIsAdmin(true);
+        }
+      } else {
+        setIsAdmin(false);
+      }
+      setAuthReady(true);
+    });
+  }, []);
 
   // Custom Confirm Dialog
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -115,10 +167,6 @@ export default function App() {
     message: "",
     onConfirm: () => {},
   });
-
-  useEffect(() => {
-    localStorage.setItem('ethereal_lessons', JSON.stringify(lessons));
-  }, [lessons]);
 
   useEffect(() => {
     localStorage.setItem('lexicon_theme', theme);
@@ -183,30 +231,81 @@ export default function App() {
     return allVoices.find(v => v.lang.startsWith('en')) || null;
   }, [allVoices, voiceType]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const migrateToCloud = async () => {
+    if (!isAdmin) return;
+    try {
+      const batch = writeBatch(db);
+      lessons.forEach((lesson, index) => {
+        const lessonRef = doc(db, 'lessons', lesson.id);
+        batch.set(lessonRef, {
+          ...lesson,
+          order: index,
+          updatedAt: serverTimestamp()
+        });
+      });
+      await batch.commit();
+      alert("Database successfully migrated to Cloud!");
+    } catch (err) {
+      console.error(err);
+      alert("Migration failed. Check permissions.");
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password === "admin12345") {
-      setIsAdmin(true);
-      setShowLogin(false);
-      setLoginError("");
-      setAdminView('dashboard');
-      setCurrentView('app');
+      try {
+        if (!user) {
+          await signInWithGoogle();
+        }
+        localStorage.setItem('lexicon_admin_session', 'admin12345');
+        setIsAdmin(true);
+        setShowLogin(false);
+        setLoginError("");
+        setAdminView('dashboard');
+        setCurrentView('app');
+      } catch (err) {
+        setLoginError("Login failed. Please check browser popups.");
+      }
     } else {
       setLoginError("Invalid Passcode. Please try again.");
       setPassword("");
     }
   };
 
+  const handleLogout = async () => {
+    await signOut(auth);
+    localStorage.removeItem('lexicon_admin_session');
+    setIsAdmin(false);
+    setAdminView(null);
+  };
+
   // CRUD Actions
-  const addLesson = () => {
+  const addLesson = async () => {
     const newLesson: LessonData = {
       id: `lesson-${Date.now()}`,
       nomeDaAula: "New Lesson",
       audios: []
     };
-    setLessons([...lessons, newLesson]);
-    setEditingLesson(newLesson);
-    setAdminView('edit_lesson');
+    
+    if (isAdmin) {
+      try {
+        await setDoc(doc(db, 'lessons', newLesson.id), {
+          ...newLesson,
+          order: lessons.length,
+          updatedAt: serverTimestamp()
+        });
+        setEditingLesson(newLesson);
+        setAdminView('edit_lesson');
+      } catch (err) {
+        console.error(err);
+        alert("Failed to save to cloud.");
+      }
+    } else {
+      setLessons([...lessons, newLesson]);
+      setEditingLesson(newLesson);
+      setAdminView('edit_lesson');
+    }
   };
 
   const deleteLesson = (id: string) => {
@@ -214,9 +313,17 @@ export default function App() {
       isOpen: true,
       title: "Delete Module",
       message: "Are you sure you want to remove this entire module and all its audio tracks?",
-      onConfirm: () => {
+      onConfirm: async () => {
+        if (isAdmin) {
+          try {
+            await deleteDoc(doc(db, 'lessons', id));
+          } catch (err) {
+             console.error(err);
+          }
+        }
         const filtered = lessons.filter(l => l.id !== id);
-        setLessons(filtered);
+        if (!isAdmin) setLessons(filtered);
+        
         if (activeLessonId === id) {
           const nextLesson = filtered[0];
           if (nextLesson) {
@@ -229,8 +336,19 @@ export default function App() {
     });
   };
 
-  const updateLesson = (updated: LessonData) => {
-    setLessons(lessons.map(l => l.id === updated.id ? updated : l));
+  const updateLesson = async (updated: LessonData) => {
+    if (isAdmin) {
+      try {
+        await setDoc(doc(db, 'lessons', updated.id), {
+          ...updated,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      setLessons(lessons.map(l => l.id === updated.id ? updated : l));
+    }
     setEditingLesson(updated);
   };
 
@@ -634,10 +752,25 @@ export default function App() {
               className={`w-full max-w-4xl glass ${deviceMode === 'mobile' ? 'p-6 rounded-3xl' : 'p-10 rounded-[40px]'} border border-white/10 body-light:border-slate-200`}
             >
               <div className={`flex ${deviceMode === 'mobile' ? 'flex-col gap-4' : 'justify-between items-center'} mb-10`}>
-                <h2 className={`${deviceMode === 'mobile' ? 'text-2xl' : 'text-3xl'} font-serif text-white body-light:text-slate-900`}>Admin Dashboard</h2>
-                <button onClick={addLesson} className="px-6 py-2 bg-brand-primary text-sm font-bold rounded-full hover:scale-105 transition-transform text-white">
-                  + New Module
-                </button>
+                <div className="flex flex-col">
+                  <h2 className={`${deviceMode === 'mobile' ? 'text-2xl' : 'text-3xl'} font-serif text-white body-light:text-slate-900`}>Admin Dashboard</h2>
+                  {!isCloudSynced && (
+                    <button 
+                      onClick={migrateToCloud}
+                      className="text-[10px] text-brand-primary flex items-center gap-1 mt-1 hover:underline"
+                    >
+                      <CloudUpload size={10} /> Database not synced. Migrate local to Cloud?
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={handleLogout} className="px-6 py-2 border border-white/10 text-slate-400 text-sm font-bold rounded-full hover:bg-white/5 transition-colors flex items-center gap-2">
+                    <LogOut size={14} /> Logout
+                  </button>
+                  <button onClick={addLesson} className="px-6 py-2 bg-brand-primary text-sm font-bold rounded-full hover:scale-105 transition-transform text-white">
+                    + New Module
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-4">
