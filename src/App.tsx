@@ -209,14 +209,15 @@ export default function App() {
 
   const getVoice = useCallback(() => {
     const findVoice = (lang: string, gender: 'Male' | 'Female') => {
-      // 1. Target UK/British explicitly
+      // 1. Strict Filter for British/UK only
       const pool = allVoices.filter(v => {
         const n = v.name.toLowerCase();
         const l = v.lang.toLowerCase();
-        return l.includes('gb') || l.includes('uk') || n.includes('british') || n.includes('united kingdom') || n.includes('uk');
+        // Specifically look for GB, UK, or United Kingdom
+        return l.includes('gb') || l.includes('uk') || n.includes('british') || n.includes('united kingdom') || n.includes('u.k.');
       });
 
-      if (pool.length === 0) return allVoices.find(v => v.lang.startsWith('en')) || null;
+      if (pool.length === 0) return null;
 
       // Common British Male Names & Indicators
       const maleMarkers = ['daniel', 'oliver', 'harry', 'arthur', 'george', 'david', 'james', 'guy', 'liam', 'charles', 'thomas', 'william', 'jack', 'alfie', 'malcolm', 'nigel', 'gordon', 'graham', 'male', '(m)', 'variant 2', 'variant 1'];
@@ -243,37 +244,36 @@ export default function App() {
 
       let genderFiltered = pool.filter(v => gender === 'Male' ? isMale(v) : isFemale(v));
 
-      // If gender filter failed to find anything specific, try to bifurcate the pool
       if (genderFiltered.length === 0) {
+        // If we have a pool but gender filtering failed, try to pick different indexes to at least differentiate
         if (gender === 'Male') {
-          // Typically the default (pool[0]) is female. So for male, try to find something else.
           genderFiltered = pool.length > 1 ? [pool[1]] : [pool[0]];
         } else {
           genderFiltered = [pool[0]];
         }
       }
 
-      // Priority 1: High quality "Google" or "Neural" voices
+      // Priority 1: High quality "Google" or "Neural" or "Online" voices
       const premium = genderFiltered.filter(v => 
         v.name.includes('Google') || v.name.includes('Neural') || v.name.includes('Natural') || v.name.includes('Online')
       );
       if (premium.length > 0) return premium[0];
       
-      // Priority 2: Distinctive names
+      // Priority 2: Matches with distinctive British names
       const distinctive = genderFiltered.find(v => {
         const n = v.name.toLowerCase();
-        if (gender === 'Male') return n.includes('arthur') || n.includes('malcolm') || n.includes('george') || n.includes('harry');
-        return n.includes('martha') || n.includes('serena') || n.includes('hazel');
+        if (gender === 'Male') return n.includes('arthur') || n.includes('malcolm') || n.includes('george') || n.includes('harry') || n.includes('daniel');
+        return n.includes('martha') || n.includes('serena') || n.includes('hazel') || n.includes('emma');
       });
       if (distinctive) return distinctive;
 
-      return genderFiltered[0] || pool[0];
+      return genderFiltered[0] || null;
     };
 
     if (voiceType === 'UK-M') return findVoice('en-GB', 'Male');
     if (voiceType === 'UK-F') return findVoice('en-GB', 'Female');
 
-    return allVoices.find(v => v.lang.startsWith('en')) || null;
+    return null;
   }, [allVoices, voiceType]);
 
   const migrateToCloud = async () => {
@@ -1040,21 +1040,23 @@ const PlayerContent: React.FC<{
       }, chunk.duration * 1000);
     } else {
       const utterance = new SpeechSynthesisUtterance(chunk.content);
+      
+      // CRITICAL: Always force en-GB language tag
+      utterance.lang = 'en-GB';
+
       if (voice) {
         utterance.voice = voice;
-        utterance.lang = voice.lang;
         
         // Artificial gender distinction for limited voice sets (mobile)
         if (voiceType === 'UK-M') {
-          utterance.pitch = 0.85; // Lower pitch for male
-          utterance.rate = 0.95;  // Slightly slower
+          utterance.pitch = 0.85; 
+          utterance.rate = 0.95;  
         } else {
-          utterance.pitch = 1.05; // Slightly higher for female
+          utterance.pitch = 1.05; 
           utterance.rate = 1.0;
         }
-      } else {
-        utterance.lang = 'en-GB';
       }
+      
       utterance.onend = () => {
         playChunk(index + 1);
       };
