@@ -25,6 +25,7 @@ import {
   collection, 
   onSnapshot, 
   doc, 
+  getDoc,
   setDoc, 
   deleteDoc, 
   query, 
@@ -139,13 +140,17 @@ export default function App() {
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        // Check if user is in admins collection
-        const adminDoc = await getDocs(query(collection(db, 'admins')));
-        const adminIds = adminDoc.docs.map(d => d.id);
+        let isRegisteredAdmin = false;
+        try {
+          const adminRef = doc(db, 'admins', u.uid);
+          const adminSnap = await getDoc(adminRef);
+          if (adminSnap.exists()) isRegisteredAdmin = true;
+        } catch (err) {
+          console.log("Admin check: Error reading admin doc (normal if not admin).");
+        }
         
-        // Also check localStorage passcode for session continuity
         const sessionPasscode = localStorage.getItem('lexicon_admin_session');
-        if (adminIds.includes(u.uid) || u.email === 'fontevytor@gmail.com' || sessionPasscode === 'admin12345') {
+        if (isRegisteredAdmin || u.email === 'fontevytor@gmail.com' || sessionPasscode === 'admin12345') {
           setIsAdmin(true);
         }
       } else {
